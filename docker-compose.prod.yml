@@ -11,13 +11,10 @@ services:
       - ./data/botapi:/var/lib/telegram-bot-api
 
   ihd-bot:
-    build:
-      context: .
-      dockerfile: Dockerfile.bot
-    image: ihd-bot:latest
+    image: ghcr.io/interhousedev/archive_bot:bot-latest
     container_name: ihd-bot
     restart: unless-stopped
-    env_file: .env
+    env_file: bot.env
     environment:
       MONGO_URI: ${MONGO_URI}
     volumes:
@@ -29,13 +26,10 @@ services:
         condition: service_started
 
   ihd-web:
-    build:
-      context: .
-      dockerfile: Dockerfile.web
-    image: ihd-web:latest
+    image: ghcr.io/interhousedev/archive_bot:web-latest
     container_name: ihd-web
     restart: unless-stopped
-    env_file: .env
+    env_file: web.env
     environment:
       MONGO_URI: ${MONGO_URI}
     ports:
