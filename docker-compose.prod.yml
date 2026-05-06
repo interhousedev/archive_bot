@@ -1,0 +1,65 @@
+services:
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    container_name: ihd-botapi
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      TELEGRAM_LOCAL: 1
+    volumes:
+      - ./data/botapi:/var/lib/telegram-bot-api
+
+  ihd-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    image: ihd-bot:latest
+    container_name: ihd-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONGO_URI: ${MONGO_URI}
+    volumes:
+      - ./data/botapi:/var/lib/telegram-bot-api
+    depends_on:
+      mongo:
+        condition: service_healthy
+      telegram-bot-api:
+        condition: service_started
+
+  ihd-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: ihd-web:latest
+    container_name: ihd-web
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONGO_URI: ${MONGO_URI}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  mongo:
+    image: mongo:latest
+    container_name: ihd-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME}
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  mongo_data:

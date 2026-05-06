@@ -1,0 +1,28 @@
+services:
+  mongo:
+    image: mongo:latest
+    container_name: ihd-mongo-dev
+    ports:
+      - "127.0.0.1:27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME}
+    volumes:
+      - mongo_data_dev:/data/db
+
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    container_name: ihd-botapi-dev
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      TELEGRAM_LOCAL: 1
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - ./data/botapi:/var/lib/telegram-bot-api
+
+volumes:
+  mongo_data_dev:
