@@ -39,9 +39,9 @@ class ErrorMiddleware(BaseMiddleware):
                 notify_user = True
 
             settings = data.get("container") and data["container"].settings
-            admin_id = settings.admin_id if settings else None
+            admins_ids = settings.admins_ids if settings else None
 
-            if admin_id:
+            for admin_id in admins_ids:
                 try:
                     for msg in message_split(text=support_data, type_="error", uuid_=error_uuid):
                         await bot.send_message(admin_id, msg)

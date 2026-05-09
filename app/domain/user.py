@@ -8,4 +8,7 @@ class User(BaseModel):
 
     telegram_id: int
 
+    # By student
     is_verified: bool = False
+    # By admins
+    is_banned: bool = False

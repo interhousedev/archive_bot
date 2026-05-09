@@ -25,3 +25,9 @@ class UserRepository:
             {"telegram_id": telegram_id},
             {"$set": {"is_verified": verified}},
         )
+
+    async def set_banned(self, telegram_id: int, banned: bool) -> None:
+        await self.collection.update_one(
+            {"telegram_id": telegram_id},
+            {"$set": {"is_banned": banned}},
+        )

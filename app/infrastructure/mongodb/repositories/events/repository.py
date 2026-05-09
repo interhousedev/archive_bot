@@ -26,8 +26,20 @@ class EventRepository:
     async def create(self, event_dict: dict) -> None:
         await self.collection.insert_one(event_dict)
 
+    async def update(self, event_id: str, fields: dict) -> None:
+        await self.collection.update_one({"_id": event_id}, {"$set": fields})
+
+    async def delete(self, event_id: str) -> None:
+        await self.collection.delete_one({"_id": event_id})
+
     async def increment_photos_count(self, event_id: str) -> None:
         await self.collection.update_one(
             {"_id": event_id},
             {"$inc": {"photos_count": 1}},
+        )
+
+    async def decrement_photos_count(self, event_id: str) -> None:
+        await self.collection.update_one(
+            {"_id": event_id},
+            {"$inc": {"photos_count": -1}},
         )

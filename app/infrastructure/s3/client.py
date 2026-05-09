@@ -62,5 +62,11 @@ class S3Client:
         """Generate a presigned GET URL valid for `expires_seconds` (default 1 day)."""
         return await asyncio.to_thread(self._presign_sync, key, expires_seconds)
 
+    def _delete_sync(self, key: str) -> None:
+        self._client.delete_object(Bucket=self.bucket_name, Key=key)
+
+    async def delete(self, key: str) -> None:
+        await asyncio.to_thread(self._delete_sync, key)
+
     def public_url(self, key: str) -> str:
         return f"{self.base_url}/{key}"

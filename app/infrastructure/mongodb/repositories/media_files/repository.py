@@ -19,6 +19,7 @@ class MediaFileRepository:
         query: dict = {"event_id": event_id}
         if only_visible:
             query["is_showed"] = True
+            query["is_banned"] = False
         docs = await self.collection.find(query).to_list(length=None)
         return [self._normalize(d) for d in docs]
 
@@ -35,3 +36,11 @@ class MediaFileRepository:
         await self.collection.update_one(
             {"_id": file_id}, {"$set": {"is_showed": showed}}
         )
+
+    async def set_banned(self, file_id: str, banned: bool) -> None:
+        await self.collection.update_one(
+            {"_id": file_id}, {"$set": {"is_banned": banned}}
+        )
+
+    async def delete(self, file_id: str) -> None:
+        await self.collection.delete_one({"_id": file_id})

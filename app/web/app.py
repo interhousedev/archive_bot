@@ -275,11 +275,14 @@ async def event_page(slug: str) -> HTMLResponse:
     if not media_files:
         media_html = "<p class='empty'>No files uploaded yet.</p>"
     else:
+        _type_order = {FileType.FILE: 0, FileType.IMAGE: 1, FileType.VIDEO: 2}
+        media_files_sorted = sorted(media_files, key=lambda f: _type_order[f.type])
         items = []
-        for mf in media_files:
+        for mf in media_files_sorted:
             s3_key = f"{ev.images_folder}/{mf.file_name}"
             url = await _container.s3_client.presigned_url(s3_key, expires_seconds=86400)
-            items.append(_render_media_item(mf.file_name, mf.type, url, slug, mf.id))
+            display = mf.original_name or mf.file_name
+            items.append(_render_media_item(display, mf.type, url, slug, mf.id))
         media_html = f'<div class="media-grid">{"".join(items)}</div>'
 
     header = f"""
@@ -309,11 +312,11 @@ async def file_page(slug: str, file_id: str) -> HTMLResponse:
 
     s3_key = f"{ev.images_folder}/{mf.file_name}"
     url = await _container.s3_client.presigned_url(s3_key, expires_seconds=86400)
-
-    ext = mf.file_name.rsplit(".", 1)[-1].lower() if "." in mf.file_name else ""
+    display = mf.original_name or mf.file_name
+    ext = display.rsplit(".", 1)[-1].lower() if "." in display else ""
 
     if mf.type == FileType.IMAGE:
-        media_html = f'<img src="{url}" alt="{mf.file_name}">'
+        media_html = f'<img src="{url}" alt="{display}">'
     elif mf.type == FileType.VIDEO:
         media_html = f'<video src="{url}" controls></video>'
     else:
@@ -323,10 +326,10 @@ async def file_page(slug: str, file_id: str) -> HTMLResponse:
     body = f"""
 <div class="file-page">
   {media_html}
-  <a class="download-btn" href="{url}" download="{mf.file_name}">⬇ Download</a>
+  <a class="download-btn" href="{url}" download="{display}">⬇ Download</a>
 </div>"""
 
-    return HTMLResponse(_base_html(mf.file_name, body, back_href=f"/{slug}"))
+    return HTMLResponse(_base_html(display, body, back_href=f"/{slug}"))
 
 
 def _render_media_item(filename: str, file_type: FileType, url: str, slug: str, file_id: str) -> str:

@@ -16,4 +16,9 @@ class MediaFile(BaseModel):
 
     type: FileType
 
+    original_name: str | None = None
+
+    # By student
     is_showed: bool = True
+    # By admins
+    is_banned: bool = False

@@ -25,7 +25,12 @@ class MediaFileService:
         return [MediaFile(**d) for d in docs]
 
     async def create(
-        self, file_name: str, event_id: str, author_id: str, file_type: FileType
+        self,
+        file_name: str,
+        event_id: str,
+        author_id: str,
+        file_type: FileType,
+        original_name: str | None = None,
     ) -> MediaFile:
         media_file = MediaFile(
             id=str(uuid.uuid7()),
@@ -33,6 +38,7 @@ class MediaFileService:
             event_id=event_id,
             author_id=author_id,
             type=file_type,
+            original_name=original_name,
             is_showed=True,
         )
         await self.repo.create(media_file.model_dump(by_alias=True))
@@ -40,3 +46,9 @@ class MediaFileService:
 
     async def set_showed(self, file_id: str, showed: bool) -> None:
         await self.repo.set_showed(file_id, showed)
+
+    async def set_banned(self, file_id: str, banned: bool) -> None:
+        await self.repo.set_banned(file_id, banned)
+
+    async def delete(self, file_id: str) -> None:
+        await self.repo.delete(file_id)

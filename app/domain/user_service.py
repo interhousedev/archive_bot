@@ -20,3 +20,6 @@ class UserService:
 
     async def verify(self, telegram_id: int) -> None:
         await self.repo.set_verified(telegram_id=telegram_id, verified=True)
+
+    async def set_banned(self, telegram_id: int, banned: bool) -> None:
+        await self.repo.set_banned(telegram_id=telegram_id, banned=banned)
