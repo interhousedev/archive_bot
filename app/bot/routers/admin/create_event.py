@@ -2,7 +2,9 @@ import uuid
 from datetime import datetime
 
 from app.bootstrap import Container
-from app.bot.routers.admin.callbacks import CreateCancel, CreateSkipDescription
+from app.bot.routers.admin.callbacks import (
+    CreateCancel, CreateNewCategory, CreateSelectCategory, CreateSkipDescription,
+)
 from app.bot.routers.admin.router import router
 
 from aiogram.filters import Command, StateFilter
@@ -13,6 +15,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
 class CreateEventStates(StatesGroup):
+    waiting_category_choice = State()
+    waiting_category_name = State()
     waiting_name = State()
     waiting_date = State()
     waiting_description = State()
@@ -24,10 +28,49 @@ def _cancel_kb():
     return builder.as_markup()
 
 
+async def _category_kb(container: Container):
+    categories = await container.category_service.get_all()
+    builder = InlineKeyboardBuilder()
+    for cat in sorted(categories, key=lambda c: c.name):
+        builder.row(InlineKeyboardButton(
+            text=cat.name,
+            callback_data=CreateSelectCategory(category_id=cat.id).pack(),
+        ))
+    builder.row(InlineKeyboardButton(text="➕ New category", callback_data=CreateNewCategory().pack()))
+    builder.row(InlineKeyboardButton(text="✖️ Cancel", callback_data=CreateCancel().pack()))
+    return builder.as_markup()
+
+
 @router.message(Command("create_event"), StateFilter(None))
-async def create_event_start(message: Message, state: FSMContext) -> None:
+async def create_event_start(message: Message, state: FSMContext, container: Container) -> None:
+    await state.set_state(CreateEventStates.waiting_category_choice)
+    await message.answer("Select a category for the event:", reply_markup=await _category_kb(container))
+
+
+@router.callback_query(CreateSelectCategory.filter(), StateFilter(CreateEventStates.waiting_category_choice))
+async def create_select_category(
+    callback: CallbackQuery, callback_data: CreateSelectCategory, state: FSMContext
+) -> None:
+    await state.update_data(category_id=callback_data.category_id)
     await state.set_state(CreateEventStates.waiting_name)
-    await message.answer("Enter event name:", reply_markup=_cancel_kb())
+    await callback.message.edit_text("Enter event name:", reply_markup=_cancel_kb())
+
+
+@router.callback_query(CreateNewCategory.filter(), StateFilter(CreateEventStates.waiting_category_choice))
+async def create_new_category_prompt(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(CreateEventStates.waiting_category_name)
+    await callback.message.edit_text("Enter new category name:", reply_markup=_cancel_kb())
+
+
+@router.message(StateFilter(CreateEventStates.waiting_category_name))
+async def create_category_name(message: Message, state: FSMContext, container: Container) -> None:
+    category = await container.category_service.create(name=message.text.strip())
+    await state.update_data(category_id=category.id)
+    await state.set_state(CreateEventStates.waiting_name)
+    await message.answer(
+        f'Category "{category.name}" created.\nEnter event name:',
+        reply_markup=_cancel_kb(),
+    )
 
 
 @router.message(StateFilter(CreateEventStates.waiting_name))
@@ -54,45 +97,39 @@ async def create_event_date(message: Message, state: FSMContext) -> None:
     await message.answer("Enter description (or skip):", reply_markup=builder.as_markup())
 
 
-@router.message(StateFilter(CreateEventStates.waiting_description))
-async def create_event_description(message: Message, state: FSMContext, container: Container) -> None:
-    data = await state.get_data()
-    await state.clear()
+async def _finish_create(data: dict, container: Container, description: str | None = None) -> str:
     event = await container.event_service.create(
         name=data["name"],
         date=data["date"],
         images_folder=str(uuid.uuid4()),
-        description=message.text.strip() if message.text else None,
+        category_id=data["category_id"],
+        description=description,
     )
     raw_id = event.id.replace("-", "")
     slug = raw_id[:4] + raw_id[-8:]
-    await message.answer(
+    return (
         f"✅ Event created!\n"
         f"Name: {event.name}\n"
         f"Date: {event.date.strftime('%d.%m.%Y')}\n"
         f"Slug: {slug}\n"
         f"S3 folder: {event.images_folder}"
     )
+
+
+@router.message(StateFilter(CreateEventStates.waiting_description))
+async def create_event_description(message: Message, state: FSMContext, container: Container) -> None:
+    data = await state.get_data()
+    await state.clear()
+    text = await _finish_create(data, container, description=message.text.strip() if message.text else None)
+    await message.answer(text)
 
 
 @router.callback_query(CreateSkipDescription.filter())
 async def create_skip_description(callback: CallbackQuery, state: FSMContext, container: Container) -> None:
     data = await state.get_data()
     await state.clear()
-    event = await container.event_service.create(
-        name=data["name"],
-        date=data["date"],
-        images_folder=str(uuid.uuid4()),
-    )
-    raw_id = event.id.replace("-", "")
-    slug = raw_id[:4] + raw_id[-8:]
-    await callback.message.edit_text(
-        f"✅ Event created!\n"
-        f"Name: {event.name}\n"
-        f"Date: {event.date.strftime('%d.%m.%Y')}\n"
-        f"Slug: {slug}\n"
-        f"S3 folder: {event.images_folder}"
-    )
+    text = await _finish_create(data, container)
+    await callback.message.edit_text(text)
 
 
 @router.callback_query(CreateCancel.filter())

@@ -23,10 +23,12 @@ class EventService:
         name: str,
         date: datetime,
         images_folder: str,
+        category_id: str,
         description: str | None = None,
     ) -> Event:
         event = Event(
             id=str(uuid.uuid7()),
+            category_id=category_id,
             name=name,
             date=date,
             images_folder=images_folder,

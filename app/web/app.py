@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from fastapi import FastAPI, APIRouter, HTTPException
@@ -62,6 +63,19 @@ select.year-sel:focus { border-color: #1A669A; }
 .empty { color: #9a9ab0; margin-top: 32px; text-align: center; font-size: .95rem; }
 .hidden { display: none !important; }
 
+/* ── Category folder ── */
+.cat-folder { grid-column: 1 / -1; background: #e8edf2; border-radius: 14px; padding: 16px; }
+.cat-folder-header { display: flex; align-items: center; gap: 10px; cursor: pointer;
+                     user-select: none; padding: 2px 0; }
+.cat-folder-header:hover .cat-folder-name { color: #1A669A; }
+.cat-folder-name { font-size: 1.05rem; font-weight: 700; color: #1a1a2e; transition: color .15s; }
+.cat-folder-count { font-size: .83rem; color: #7a7a9a; margin-left: auto; }
+.cat-folder-arrow { font-size: .8rem; color: #7a7a9a; transition: transform .2s; margin-left: 4px; }
+.cat-folder.open .cat-folder-arrow { transform: rotate(90deg); }
+.cat-folder-inner { display: none; margin-top: 14px;
+                    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+.cat-folder.open .cat-folder-inner { display: grid; }
+
 /* ── Event page ── */
 .event-header { margin-bottom: 20px; }
 .event-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
@@ -114,41 +128,90 @@ select.year-sel:focus { border-color: #1A669A; }
 """
 
 _JS_INDEX = """
-const cards = document.querySelectorAll('.card[data-name]');
 const searchInput = document.getElementById('search');
 const yearSel = document.getElementById('year-sel');
 const sortBtn = document.getElementById('sort-btn');
-let sortAsc = false;
 const grid = document.getElementById('cards-grid');
+const emptyMsg = document.getElementById('empty-msg');
+let sortAsc = false;
 
 function normalize(s) { return s.toLowerCase().trim(); }
 
-function applyFilters() {
-  const q = normalize(searchInput.value);
-  const yr = yearSel.value;
-  cards.forEach(c => {
-    const nameMatch = !q || normalize(c.dataset.name).includes(q);
-    const yearMatch = !yr || c.dataset.year === yr;
-    c.classList.toggle('hidden', !(nameMatch && yearMatch));
-  });
+function makeCard(ev) {
+  const a = document.createElement('a');
+  a.className = 'card';
+  a.href = '/' + ev.slug;
+  a.innerHTML = '<div class="card-name">' + ev.name + '</div>'
+    + '<div class="card-meta">' + ev.date_str + ' &bull; ' + ev.photos_count + ' file(s)</div>';
+  return a;
 }
 
-function applySort() {
-  const visible = [...cards].filter(c => !c.classList.contains('hidden'));
-  visible.sort((a, b) => {
-    const da = parseInt(a.dataset.ts), db = parseInt(b.dataset.ts);
-    return sortAsc ? da - db : db - da;
+function makeFolder(catName, events) {
+  const div = document.createElement('div');
+  div.className = 'cat-folder';
+  const header = document.createElement('div');
+  header.className = 'cat-folder-header';
+  header.innerHTML = '<span class="cat-folder-name">\\uD83D\\uDCC1 ' + catName + '</span>'
+    + '<span class="cat-folder-count">' + events.length + ' events</span>'
+    + '<span class="cat-folder-arrow">&#9654;</span>';
+  div.appendChild(header);
+  const inner = document.createElement('div');
+  inner.className = 'cat-folder-inner';
+  events.forEach(ev => inner.appendChild(makeCard(ev)));
+  div.appendChild(inner);
+  header.addEventListener('click', () => div.classList.toggle('open'));
+  return div;
+}
+
+function render() {
+  const q = normalize(searchInput.value);
+  const yr = yearSel.value;
+
+  const visible = EVENTS.filter(ev => {
+    const nameMatch = !q || normalize(ev.name).includes(q) || normalize(ev.cat_name).includes(q);
+    const yearMatch = !yr || String(ev.year) === yr;
+    return nameMatch && yearMatch;
   });
-  visible.forEach(c => grid.appendChild(c));
+
+  grid.innerHTML = '';
+
+  if (visible.length === 0) {
+    emptyMsg.classList.remove('hidden');
+    return;
+  }
+  emptyMsg.classList.add('hidden');
+
+  const catMap = new Map();
+  const noCat = [];
+  visible.forEach(ev => {
+    if (!ev.cat_id) { noCat.push(ev); return; }
+    if (!catMap.has(ev.cat_id)) catMap.set(ev.cat_id, { name: ev.cat_name, events: [] });
+    catMap.get(ev.cat_id).events.push(ev);
+  });
+
+  const items = [];
+  noCat.forEach(ev => items.push({ ts: ev.ts, el: makeCard(ev) }));
+  catMap.forEach(({ name, events }) => {
+    if (events.length === 1) {
+      items.push({ ts: events[0].ts, el: makeCard(events[0]) });
+    } else {
+      const ts = Math.max(...events.map(ev => ev.ts));
+      items.push({ ts, el: makeFolder(name, events) });
+    }
+  });
+
+  items.sort((a, b) => sortAsc ? a.ts - b.ts : b.ts - a.ts);
+  items.forEach(i => grid.appendChild(i.el));
 }
 
 sortBtn.addEventListener('click', () => {
   sortAsc = !sortAsc;
   sortBtn.querySelector('.arrow').textContent = sortAsc ? '▲' : '▼';
-  applySort();
+  render();
 });
-searchInput.addEventListener('input', () => { applyFilters(); applySort(); });
-yearSel.addEventListener('change', () => { applyFilters(); applySort(); });
+searchInput.addEventListener('input', render);
+yearSel.addEventListener('change', render);
+render();
 """
 
 _JS_EVENT = """
@@ -212,13 +275,28 @@ def _base_html(title: str, body: str, js: str = "", back_href: str | None = None
 @_router.get("/", response_class=HTMLResponse)
 async def index() -> HTMLResponse:
     events = await _container.event_service.get_all()
-    events_sorted = sorted(events, key=lambda e: e.date, reverse=True)
+    categories = await _container.category_service.get_all()
+    cat_map = {c.id: c.name for c in categories}
 
     current_year = datetime.now().year
     year_options = "".join(
         f'<option value="{y}">{y}</option>'
         for y in range(current_year, 1986, -1)
     )
+
+    events_data = json.dumps([
+        {
+            "slug": _slug(e.id),
+            "name": e.name,
+            "year": e.date.year,
+            "ts": int(e.date.timestamp()),
+            "date_str": e.date.strftime("%d %b %Y"),
+            "photos_count": e.photos_count,
+            "cat_id": e.category_id or "",
+            "cat_name": cat_map.get(e.category_id, "") if e.category_id else "",
+        }
+        for e in events
+    ], ensure_ascii=False)
 
     controls = f"""
 <div class="controls">
@@ -230,22 +308,15 @@ async def index() -> HTMLResponse:
   <button id="sort-btn" class="sort-btn">Date <span class="arrow">▼</span></button>
 </div>"""
 
-    if not events_sorted:
-        body = controls + "<p class='empty'>No events yet.</p>"
-    else:
-        cards = "".join(
-            f'<a class="card" href="/{_slug(e.id)}" '
-            f'data-name="{e.name}" '
-            f'data-year="{e.date.year}" '
-            f'data-ts="{int(e.date.timestamp())}">'
-            f'<div class="card-name">{e.name}</div>'
-            f'<div class="card-meta">{e.date.strftime("%d %b %Y")} &bull; {e.photos_count} file(s)</div>'
-            f'</a>'
-            for e in events_sorted
-        )
-        body = controls + f'<div class="grid" id="cards-grid">{cards}</div>'
+    body = (
+        controls
+        + '<div class="grid" id="cards-grid"></div>'
+        + '<p class="empty hidden" id="empty-msg">No events found.</p>'
+    )
 
-    return HTMLResponse(_base_html("Memory Archive", body, _JS_INDEX))
+    js = f"const EVENTS = {events_data};\n" + _JS_INDEX
+
+    return HTMLResponse(_base_html("Memory Archive", body, js))
 
 
 # ── Event page ─────────────────────────────────────────────────────────────────

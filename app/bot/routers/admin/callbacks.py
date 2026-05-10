@@ -9,6 +9,14 @@ class CreateSkipDescription(CallbackData, prefix="cr_skip"):
     pass
 
 
+class CreateSelectCategory(CallbackData, prefix="cr_cat"):
+    category_id: str
+
+
+class CreateNewCategory(CallbackData, prefix="cr_newcat"):
+    pass
+
+
 class ManageBack(CallbackData, prefix="mg_back"):
     pass
 

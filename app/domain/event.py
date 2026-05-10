@@ -8,6 +8,8 @@ class Event(BaseModel):
 
     id: str = Field(serialization_alias="_id") # uuid v7
 
+    category_id: str
+
     name: str
 
     description: str | None = None

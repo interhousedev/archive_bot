@@ -19,3 +19,6 @@ class MongoClient:
 
     def media_files(self):
         return self.db["media_files"]
+
+    def categories(self):
+        return self.db["categories"]
