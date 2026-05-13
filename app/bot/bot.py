@@ -14,6 +14,8 @@ async def _set_admin_commands(bot: Bot, admin_ids: list[int]) -> None:
         BotCommand(command="start", description="Open menu"),
         BotCommand(command="create_event", description="Create new event"),
         BotCommand(command="manage_events", description="Manage events"),
+        BotCommand(command="approve", description="Manually approve a student by chat_id"),
+        BotCommand(command="disapprove", description="Manually disapprove a student by chat_id"),
     ]
     for admin_id in admin_ids:
         try:
